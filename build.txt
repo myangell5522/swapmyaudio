@@ -1,6 +1,7 @@
 displayName = Swap My Audio!
 author = myangell
-version = 0.2
+version = 0.2.1
 side = Client
 sortAfter = DieWithASmile
-buildIgnore = *.csproj, *.sln, *.user, obj\, bin\, .vs\, .git\, Properties\, image-4216444.png
+homepage = https://github.com/myangell5522/swapmyaudio
+buildIgnore = *.csproj, *.sln, *.user, obj\, bin\, .vs\, .git\, Properties\, image-4216444.png, icon_workshop.gif, workshop\

@@ -17,7 +17,8 @@ namespace swapmyaudio.UI
 	public class VolumeDeviceMenu : ModSystem
 	{
 		private const int TitleVolumeMenuMode = 26;
-		private const int PollInterval = 30;
+		// Full endpoint enumeration (COM + property store reads) on the draw thread; twice a second was overkill.
+		private const int PollInterval = 90;
 
 		private static AudioOutputService _service;
 		private static readonly List<Entry> Entries = new();
@@ -58,7 +59,7 @@ namespace swapmyaudio.UI
 				_service = new AudioOutputService();
 			}
 			catch (Exception e) {
-				ModContent.GetInstance<swapmyaudio>().Logger.Error("Audio service failed: " + e);
+				Mod.Logger.Error("Audio service failed: " + e);
 				_service = null;
 				return;
 			}
@@ -67,12 +68,10 @@ namespace swapmyaudio.UI
 				return;
 
 			RebuildEntries();
-			var log = ModContent.GetInstance<swapmyaudio>().Logger;
-			if (!_service.RoutingSupported)
-				log.Warn("Audio policy: " + AppAudioPolicy.LastError);
+			var log = Mod.Logger;
 			if (!string.IsNullOrEmpty(_service.LastError))
 				log.Warn("Audio enum: " + _service.LastError);
-			log.Info($"Audio devices: {_service.Devices.Count} ({_service.SummarizeDevices()}), policy: {_service.RoutingSupported}");
+			log.Info($"Audio devices: {_service.Devices.Count} ({_service.SummarizeDevices()})");
 
 			On_Main.DrawMenu += DrawMenuHook;
 			On_IngameOptions.Draw += DrawOptionsHook;
@@ -358,8 +357,11 @@ namespace swapmyaudio.UI
 			}
 
 			_poll++;
+			bool lost = _service != null && _service.RecoverLostDevice();
+			if (lost)
+				_index = 0; // "System Default"; otherwise RebuildEntries() would re-select the dead device
 			bool dirty = _service != null && _service.DevicesDirty;
-			if (entered || dirty || _poll >= PollInterval) {
+			if (entered || lost || dirty || _poll >= PollInterval) {
 				_poll = 0;
 				_service?.Refresh(forceDevices: true);
 				RebuildEntries();
@@ -439,28 +441,26 @@ namespace swapmyaudio.UI
 			if (_service == null || Entries.Count == 0 || delta == 0)
 				return;
 
-			_index += delta;
-			while (_index < 0)
-				_index += Entries.Count;
-			_index %= Entries.Count;
+			int previous = _index;
+			_index = ((_index + delta) % Entries.Count + Entries.Count) % Entries.Count;
 
+			var log = ModContent.GetInstance<swapmyaudio>().Logger;
 			bool ok;
 			try {
 				ok = _service.SelectDevice(Entries[_index].Id);
 			}
 			catch (Exception e) {
-				ModContent.GetInstance<swapmyaudio>().Logger.Error("Set device crashed: " + e);
+				log.Error("Set device crashed: " + e);
+				_index = previous;
 				return;
 			}
 
 			SoundEngine.PlaySound(SoundID.MenuTick);
-			var log = ModContent.GetInstance<swapmyaudio>().Logger;
 			if (!ok) {
-				string err = _service.LastError;
-				if (string.IsNullOrEmpty(err))
-					err = _service.LastSetError;
-				if (!string.IsNullOrEmpty(err))
-					log.Warn("Set device: " + err);
+				// Don't show a device we failed to switch to.
+				_index = previous;
+				if (!string.IsNullOrEmpty(_service.LastError))
+					log.Warn("Set device: " + _service.LastError);
 			}
 			else if (!string.IsNullOrEmpty(FAudioOutputTap.LastStatus)) {
 				log.Info(FAudioOutputTap.LastStatus);

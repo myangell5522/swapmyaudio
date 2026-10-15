@@ -1,3 +1,30 @@
-It annoyed me that the volume playback device you use when you enter the game cannot be changed during the game. The mod changes the headphones or speaker in Settings → Volume → Select playback device.
+Terraria picks your audio device once, when it starts. Switch from speakers to headphones halfway through a session and the game keeps playing through the speakers until you restart it. That got old fast, so I made this.
 
-Windows only.
+The mod adds an [b]Audio Device[/b] row to Settings → Volume. Click the left or right side of it, or scroll over it, to cycle through your outputs. It works on the title screen and in a world from the Esc menu, and the music and sound effects move to the new device straight away.
+
+Pick [b]System Default[/b] to put everything back the way it was.
+
+[h2]Good to know[/h2]
+[list]
+[*]Windows only. On Linux and macOS the mod loads but does nothing.
+[*]Client-side. You can use it on any server, nobody else needs it.
+[*]The choice isn't saved yet, so every launch starts on the default device.
+[*]If you unplug the device you picked, sound goes back to the default device.
+[/list]
+
+If a device refuses to switch, leave a comment with its name and I'll take a look. Source code: https://github.com/myangell5522/swapmyaudio
+
+[hr][/hr]
+
+Terraria выбирает устройство вывода звука один раз, при запуске. Переключились посреди игры с колонок на наушники, а звук так и идёт в колонки, пока не перезапустишь. Мне это надоело, поэтому сделал мод.
+
+В Настройки → Громкость появляется строка [b]Устройство вывода[/b]. Нажмите на её левую или правую часть или покрутите колёсико над ней, чтобы переключить устройство. Работает и в главном меню, и в мире через Esc. Музыка и звуки сразу переходят на новое устройство.
+
+[b]По умолчанию[/b] возвращает всё как было.
+
+[list]
+[*]Только Windows.
+[*]Мод клиентский, на сервере он не нужен.
+[*]Выбор пока не сохраняется: при каждом запуске звук идёт на устройство по умолчанию.
+[*]Если выдернуть выбранное устройство, звук вернётся на устройство по умолчанию.
+[/list]

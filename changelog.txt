@@ -1,4 +1,7 @@
-First release.
+0.2.1
 
-Change the playback device in Settings → Volume, including from ESC during a game.
-Windows only.
+- Sound no longer leaks back to the old device for a moment when the new one falls behind.
+- Delay on the new device stays low in long sessions instead of slowly growing.
+- Unplugging the selected device switches the menu back to System Default.
+- If switching fails, the menu keeps showing the device that's actually playing.
+- The Volume menu checks for new devices less often, so it does less work every frame.

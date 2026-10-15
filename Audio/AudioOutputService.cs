@@ -7,7 +7,6 @@ namespace swapmyaudio.Audio
 	internal sealed class AudioOutputService : IDisposable
 	{
 		private readonly WasapiDeviceEnumerator _enumerator;
-		private readonly AppAudioPolicy _policy;
 		private string _selectedId = "";
 
 		internal AudioOutputService()
@@ -18,7 +17,6 @@ namespace swapmyaudio.Audio
 
 			try {
 				_enumerator = new WasapiDeviceEnumerator();
-				RoutingSupported = AppAudioPolicy.TryCreate(out _policy);
 				Refresh(forceDevices: true);
 			}
 			catch (Exception e) {
@@ -29,11 +27,7 @@ namespace swapmyaudio.Audio
 
 		internal bool Supported { get; private set; }
 
-		internal bool RoutingSupported { get; }
-
 		internal string LastError { get; private set; } = "";
-
-		internal string LastSetError => _policy?.LastSetError ?? "";
 
 		internal IReadOnlyList<PlaybackDevice> Devices => _enumerator?.Devices ?? Array.Empty<PlaybackDevice>();
 
@@ -52,12 +46,7 @@ namespace swapmyaudio.Audio
 			if (forceDevices || dirty)
 				_enumerator.Refresh();
 
-			if (!string.IsNullOrEmpty(_enumerator.LastError))
-				LastError = _enumerator.LastError;
-			else if (!RoutingSupported)
-				LastError = AppAudioPolicy.LastError;
-			else
-				LastError = "";
+			LastError = _enumerator.LastError ?? "";
 		}
 
 		internal PlaybackDevice FindDevice(string id)
@@ -85,13 +74,28 @@ namespace swapmyaudio.Audio
 				return false;
 			}
 
-			if (!tap && !string.IsNullOrEmpty(FAudioOutputTap.LastError))
+			if (!tap) {
+				// Keep the previous selection: the audio is still going there.
 				LastError = FAudioOutputTap.LastError;
+				return false;
+			}
 
 			_selectedId = id;
-			if (tap)
-				LastError = "";
-			return tap;
+			LastError = "";
+			return true;
+		}
+
+		/// <summary>
+		/// If the selected device was unplugged, drop back to the system default so the UI
+		/// doesn't keep showing a device that no longer plays anything.
+		/// </summary>
+		internal bool RecoverLostDevice()
+		{
+			if (IsSystemDefault || !FAudioOutputTap.SinkLost)
+				return false;
+
+			SelectDevice("");
+			return true;
 		}
 
 		internal string SummarizeDevices(int maxNames = 4)

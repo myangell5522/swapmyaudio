@@ -1,3 +1,5 @@
-It annoyed me that the volume playback device you use when you enter the game cannot be changed during the game. The mod changes the headphones or speaker in Settings → Volume → Select playback device.
+Terraria picks your audio device once, when it starts. Switch from speakers to headphones halfway through a session and the game keeps playing through the speakers until you restart it. That got old fast, so I made this.
 
-Windows only.
+Go to Settings → Volume and use the new Audio Device row: click its left or right side, or scroll over it. Works on the title screen and in a world from the Esc menu. "System Default" puts everything back.
+
+Windows only. Client-side, works on any server.

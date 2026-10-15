@@ -12,6 +12,9 @@ namespace swapmyaudio.Audio
 	internal static class FAudioOutputTap
 	{
 		private const int FactAudioOffset = 152;
+		// struct FAudio { uint8 version; uint8 active; uint32 refcount; uint32 initFlags; uint32 updateSize; FAudioMasteringVoice* master; ... }
+		// master sits at 16 (already relied on below), so updateSize is the uint32 right before it.
+		private const int FAudioUpdateSizeOffset = 12;
 		private const int FAudioMasterOffset = 16;
 
 		[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -42,6 +45,20 @@ namespace swapmyaudio.Audio
 		internal static string LastError { get; private set; } = "";
 
 		internal static string LastStatus { get; private set; } = "";
+
+		/// <summary>True when the selected device disappeared (unplugged/disabled) while tapped.</summary>
+		internal static bool SinkLost
+		{
+			get
+			{
+				Tap[] taps = Volatile.Read(ref _taps);
+				for (int i = 0; i < taps.Length; i++) {
+					if (taps[i].Sink.Lost)
+						return true;
+				}
+				return false;
+			}
+		}
 
 		internal static bool SetDevice(string deviceId)
 		{
@@ -128,8 +145,16 @@ namespace swapmyaudio.Audio
 				if (tap == null || output == IntPtr.Zero)
 					return;
 
-				if (tap.Sink.Write(output, tap.Mix.Frames, tap.Mix.Channels))
-					tap.Silence(output);
+				// Use the engine's real block size. A hard-coded rate/100 that is larger than the
+				// actual buffer would make Silence() write past the end of FAudio's output.
+				int frames = ReadUpdateSize(audio, tap.Mix.Frames);
+				PushResult result = tap.Sink.Write(output, frames, tap.Mix.Channels);
+
+				// Written or deliberately dropped: mute the original device either way, otherwise a full
+				// queue makes the sound "leak" back to the old output for a moment.
+				// Failed (device gone): let the original output play so the player isn't left in silence.
+				if (result != PushResult.Failed)
+					tap.Silence(output, frames);
 			}
 			catch {
 			}
@@ -194,7 +219,7 @@ namespace swapmyaudio.Audio
 					ApplyVoiceDetails(master, ref channels, ref rate);
 
 				TryReadDeviceDetails(contextType, context, ref channels, ref rate);
-				engine = new EngineInfo(handle, MakeMix(channels, rate));
+				engine = new EngineInfo(handle, MakeMix(handle, channels, rate));
 				return true;
 			}
 			catch {
@@ -226,7 +251,7 @@ namespace swapmyaudio.Audio
 					return false;
 
 				ApplyVoiceDetails(master, ref channels, ref rate);
-				engine = new EngineInfo(audio, MakeMix(channels, rate));
+				engine = new EngineInfo(audio, MakeMix(audio, channels, rate));
 				return true;
 			}
 			catch {
@@ -313,12 +338,21 @@ namespace swapmyaudio.Audio
 			}
 		}
 
-		private static MixInfo MakeMix(ushort channels, uint rate)
+		private static MixInfo MakeMix(IntPtr audio, ushort channels, uint rate)
 		{
-			int frames = (int)Math.Max(64, rate / 100);
-			if (frames > 8192)
-				frames = 8192;
-			return new MixInfo(frames, channels, rate);
+			int fallback = (int)Math.Clamp(rate / 100, 64, 8192);
+			return new MixInfo(ReadUpdateSize(audio, fallback), channels, rate);
+		}
+
+		private static int ReadUpdateSize(IntPtr audio, int fallback)
+		{
+			try {
+				int size = Marshal.ReadInt32(audio, FAudioUpdateSizeOffset);
+				return size is >= 64 and <= 8192 ? size : fallback;
+			}
+			catch {
+				return fallback;
+			}
 		}
 
 		private static bool TryReadDeviceDetails(Type contextType, object context, ref ushort channels, ref uint rate)
@@ -388,7 +422,8 @@ namespace swapmyaudio.Audio
 				Audio = audio;
 				Mix = mix;
 				Sink = sink;
-				_silence = new float[mix.FloatCount];
+				// Sized for the largest block FAudio may hand us, so Silence() never needs to allocate.
+				_silence = new float[8192 * Math.Max(1, (int)mix.Channels)];
 			}
 
 			internal IntPtr Audio { get; }
@@ -397,12 +432,13 @@ namespace swapmyaudio.Audio
 
 			private readonly float[] _silence;
 
-			internal void Silence(IntPtr output)
+			internal void Silence(IntPtr output, int frames)
 			{
-				if (_silence.Length == 0 || output == IntPtr.Zero)
+				int count = frames * Mix.Channels;
+				if (count <= 0 || output == IntPtr.Zero)
 					return;
 
-				Marshal.Copy(_silence, 0, output, _silence.Length);
+				Marshal.Copy(_silence, 0, output, Math.Min(count, _silence.Length));
 			}
 
 			internal void Dispose()
