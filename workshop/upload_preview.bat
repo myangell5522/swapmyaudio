@@ -12,8 +12,9 @@ rem  in-game publisher uploads icon_workshop.png and overwrites it.
 rem ============================================================
 
 rem --- settings ------------------------------------------------
-rem Path to steamcmd.exe (https://developer.valvesoftware.com/wiki/SteamCMD)
-set "STEAMCMD=C:\steamcmd\steamcmd.exe"
+rem Path to steamcmd.exe. Leave empty: the script downloads SteamCMD
+rem from Valve into workshop\steamcmd\ on first run.
+set "STEAMCMD="
 rem Steam account that owns the Workshop item
 set "STEAM_USER="
 rem Number from the Workshop URL: ...filedetails/?id=XXXXXXXXXX
@@ -26,10 +27,28 @@ set "GIF=%HERE%..\icon_workshop.gif"
 set "VDF=%HERE%preview_update.vdf"
 set "MAX_BYTES=1048576"
 
+if "%STEAMCMD%"=="" set "STEAMCMD=%HERE%steamcmd\steamcmd.exe"
+
 if not exist "%STEAMCMD%" (
-    echo steamcmd.exe not found: "%STEAMCMD%"
-    echo Download it and fix the STEAMCMD line at the top of this file.
-    goto :fail
+    echo SteamCMD not found at "%STEAMCMD%".
+    choice /c YN /m "Download it from Valve now (about 3 MB)"
+    if errorlevel 2 goto :fail
+    for %%D in ("%STEAMCMD%") do set "STEAMCMD_DIR=%%~dpD"
+    if not exist "!STEAMCMD_DIR!" mkdir "!STEAMCMD_DIR!"
+    echo Downloading...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "$ErrorActionPreference='Stop'; [Net.ServicePointManager]::SecurityProtocol='Tls12';" ^
+        "$zip=Join-Path $env:TEMP 'steamcmd.zip';" ^
+        "Invoke-WebRequest 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip' -OutFile $zip -UseBasicParsing;" ^
+        "Expand-Archive $zip -DestinationPath $env:STEAMCMD_DIR -Force; Remove-Item $zip"
+    if not exist "%STEAMCMD%" (
+        echo Download failed. Get SteamCMD manually:
+        echo   https://developer.valvesoftware.com/wiki/SteamCMD
+        echo and put steamcmd.exe in "!STEAMCMD_DIR!"
+        goto :fail
+    )
+    echo SteamCMD installed. It will update itself on the first launch, that's normal.
+    echo.
 )
 
 if not exist "%GIF%" (

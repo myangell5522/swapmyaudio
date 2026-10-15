@@ -1,0 +1,5 @@
+bin/
+obj/
+.vs/
+workshop/steamcmd/
+workshop/preview_update.vdf

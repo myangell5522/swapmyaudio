@@ -461,3 +461,12 @@ if __name__ == "__main__":
         im = frames64[f].resize((128, 128), Image.NEAREST)
         sheet.paste(im, ((i % 8) * 128, (i // 8) * 128), im)
     sheet.save(out / "sheet.png")
+
+
+def save_sheet(out_path, size=80, cols=8):
+    """Spritesheet the mod itself uses to animate its icon in the in-game Mods list."""
+    rows = (FRAMES + cols - 1) // cols
+    sheet = Image.new("RGBA", (size * cols, size * rows), (0, 0, 0, 0))
+    for f in range(FRAMES):
+        sheet.paste(render(size, f), ((f % cols) * size, (f // cols) * size))
+    sheet.save(out_path, optimize=True)
