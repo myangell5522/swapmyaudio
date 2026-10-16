@@ -1,3 +1,8 @@
+0.2.2
+
+- Title-screen Volume page: the Audio Device line moves down when The End Of A Calamity Menu Theme (or another mod) adds a volume slider, and no longer runs into the Back button.
+- New Mod.Call API (Supported, Label, Value, Cycle) for mods with their own settings menus.
+
 0.2.1
 
 - Sound no longer leaks back to the old device for a moment when the new one falls behind.

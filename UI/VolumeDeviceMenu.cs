@@ -64,8 +64,14 @@ namespace swapmyaudio.UI
 				return;
 			}
 
-			if (_service == null || !_service.Supported)
+			if (_service == null || !_service.Supported) {
+				// Don't leave a half-built service around: everything else treats non-null as "working".
+				if (_service != null)
+					Mod.Logger.Warn("Audio service unavailable: " + _service.LastError);
+				_service?.Dispose();
+				_service = null;
 				return;
+			}
 
 			RebuildEntries();
 			var log = Mod.Logger;
@@ -84,6 +90,8 @@ namespace swapmyaudio.UI
 			_service?.Dispose();
 			_service = null;
 			Entries.Clear();
+			_theme = null;
+			_themeResolved = false;
 		}
 
 		private static void DrawMenuHook(On_Main.orig_DrawMenu orig, Main self, GameTime time)
@@ -287,7 +295,11 @@ namespace swapmyaudio.UI
 
 			DynamicSpriteFont font = FontAssets.DeathText.Value;
 			const float scale = 0.5f;
-			float y = row.Y + 36f + _extraVolumeRows * 40f;
+			// Vanilla title volume rows are 30px apart and Back starts at y=470; 40px per extra row
+			// pushed the picker into the Back button as soon as another mod added a slider.
+			// Nested bars are only seen when our hook runs outermost, so also ask DieWithASmile directly.
+			int extra = Math.Max(_extraVolumeRows, ThemeTitleRows());
+			float y = row.Y + 34f + extra * 30f;
 			float x = Main.screenWidth * 0.5f;
 			string line = Truncate(font, BuildLine(includeLabel: true), scale, Main.screenWidth * 0.72f);
 			Vector2 size = font.MeasureString(line) * scale;
@@ -436,10 +448,88 @@ namespace swapmyaudio.UI
 			return name[..25] + "...";
 		}
 
-		private static void Cycle(int delta)
+		private static Mod _theme;
+		private static bool _themeResolved;
+
+		// Rows "The End Of A Calamity Menu Theme" (DieWithASmile) adds under the title volume bars.
+		private static int ThemeTitleRows()
+		{
+			if (!_themeResolved) {
+				_themeResolved = true;
+				ModLoader.TryGetMod("DieWithASmile", out _theme);
+			}
+
+			if (_theme == null)
+				return 0;
+			try {
+				return _theme.Call("TitleVolumeRows") is int rows ? Math.Max(0, rows) : 0;
+			}
+			catch {
+				_theme = null;
+				return 0;
+			}
+		}
+
+		internal static object HandleCall(object[] args)
+		{
+			if (args == null || args.Length == 0 || args[0] is not string command)
+				return null;
+
+			switch (command.ToLowerInvariant()) {
+				case "apiversion":
+					return 1;
+				case "supported":
+					return _service != null;
+				case "label":
+					return L("AudioDevice");
+				case "value":
+					if (_service == null)
+						return null;
+					PollExternal();
+					return CurrentName() + "  " + (_index + 1) + "/" + Math.Max(1, Entries.Count);
+				case "cycle": {
+					if (_service == null)
+						return false;
+					int delta = args.Length > 1 && args[1] is int d ? d : 1;
+					bool sound = args.Length <= 2 || args[2] is not false;
+					PollExternal();
+					return Cycle(delta, sound);
+				}
+				default:
+					return null;
+			}
+		}
+
+		// Same device-list upkeep as BeginVolumePage, for callers that draw their own settings UI.
+		private static long _externalLastMs;
+		private static long _externalPollMs;
+
+		private static void PollExternal()
+		{
+			if (_service == null)
+				return;
+
+			long now = Environment.TickCount64;
+			bool entered = now - _externalLastMs > 1000; // first query after the page was closed
+			_externalLastMs = now;
+
+			bool lost = _service.RecoverLostDevice();
+			if (lost)
+				_index = 0;
+			if (entered || lost || _service.DevicesDirty || now - _externalPollMs >= PollInterval * 1000L / 60) {
+				_externalPollMs = now;
+				_service.Refresh(forceDevices: true);
+				RebuildEntries();
+			}
+			else if (Entries.Count == 0) {
+				RebuildEntries();
+			}
+		}
+
+		private static bool Cycle(int delta, bool sound = true)
 		{
 			if (_service == null || Entries.Count == 0 || delta == 0)
-				return;
+				return false;
 
 			int previous = _index;
 			_index = ((_index + delta) % Entries.Count + Entries.Count) % Entries.Count;
@@ -452,19 +542,22 @@ namespace swapmyaudio.UI
 			catch (Exception e) {
 				log.Error("Set device crashed: " + e);
 				_index = previous;
-				return;
+				return false;
 			}
 
-			SoundEngine.PlaySound(SoundID.MenuTick);
+			if (sound)
+				SoundEngine.PlaySound(SoundID.MenuTick);
 			if (!ok) {
 				// Don't show a device we failed to switch to.
 				_index = previous;
 				if (!string.IsNullOrEmpty(_service.LastError))
 					log.Warn("Set device: " + _service.LastError);
+				return false;
 			}
-			else if (!string.IsNullOrEmpty(FAudioOutputTap.LastStatus)) {
+
+			if (!string.IsNullOrEmpty(FAudioOutputTap.LastStatus))
 				log.Info(FAudioOutputTap.LastStatus);
-			}
+			return true;
 		}
 
 		private static string Truncate(DynamicSpriteFont font, string text, float scale, float maxWidth)

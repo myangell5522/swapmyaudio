@@ -1,6 +1,6 @@
 displayName = Swap My Audio!
 author = myangell
-version = 0.2.1
+version = 0.2.2
 side = Client
 sortAfter = DieWithASmile
 homepage = https://github.com/myangell5522/swapmyaudio
